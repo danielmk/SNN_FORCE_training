@@ -13,6 +13,7 @@ from scipy.integrate import solve_ivp
 from scipy.interpolate import interp1d
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
+import sys
 
 
 np.random.seed(100)  # Seeding randomness for reproducibility
@@ -173,14 +174,14 @@ for i in np.arange(0, nt, 1):
     v = v_ + dt*dv
 
     index = np.argwhere(v >= vpeak)[:, 0]  # Find the neurons that have spiked
-
+    #print(len(index))
+    #sys.exit()
     # Store spike times, and get the weight matrix column sum of spikers
     if len(index) > 0:
         # Compute the increase in current due to spiking
         JD = OMEGA[:, index].sum(axis=1)
         tspike[ns:ns+len(index), :] = np.array([index, 0*index+dt*i]).T
         ns = ns + len(index)  # total number of psikes so far
-
     else:
         JD = 0*IPSC
 
@@ -242,7 +243,8 @@ if output:
 
 """PLOTTING"""
 if plot:
+    
     fig, ax = plt.subplots(2)
-    ax[0].plot(current)
-    ax[0].plot(xz)
+    ax[0].plot(np.arange(0, current.shape[0]*10, 10), current[:,0])
+    ax[0].plot(xz[:,0])
     ax[1].plot(REC[:, 0])

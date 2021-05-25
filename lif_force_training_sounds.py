@@ -10,15 +10,24 @@ https://doi.org/10.1038/s41467-017-01827-3
 import numpy as np
 from numpy.random import rand, randn
 import matplotlib.pyplot as plt
-from mnist import MNIST
+from scipy.io import wavfile
+import sys
+from sklearn.preprocessing import StandardScaler
 
 np.random.seed(100)  # Seeding randomness for reproducibility
+
+"""Load .wav file"""
+data = wavfile.read('Awful - josh pan (online-audio-converter.com).wav')
+data_subset = data[1][1000000:1000000+data[0]*3,:]
+scaler = StandardScaler()
+scaler_fit = scaler.fit(data_subset)
+data_scaled = scaler_fit.transform(data_subset)
 
 """SIMULATION PARAMETERS"""
 plot = True
 dt = 0.00005  # Sampling interval of the simulation
-T = 15
-nt = round(T/dt)
+#T = 15
+#nt = round(T/dt)
 
 """NETWORK PARAMETERS"""
 N = 2000  # Number of neurons
@@ -32,26 +41,31 @@ p = 0.1  # Set the network sparsity
 BIAS = vpeak  # Set the BIAS current, can help decrease/increase firing rates.
 G = 0.04  # Factor of fixed weight matrix
 
+"""Sound target"""
+repeats = int(0.010 /dt)
+zx = data_scaled
+rlms_start = round(1/dt)  # When to start RLMS
+rlms_stop = rlms_start + zx.shape[0] * 5  # When to stop RLMS
+nt = rlms_start + zx.shape[0] * 5 + zx.shape[0]
+zx = np.concatenate((np.zeros((rlms_start, 2)),np.tile(zx.T, 6).T))
+# sys.exit()
+
 """RLMS PARAMETERS"""
+m = 2
 alpha = dt*0.1  # Sets the rate of weight change
 Pinv = np.eye(N)*alpha  # Initialize the correlation weight matrix for RLMS
-RECB = np.zeros((nt, 10))  # Storage matrix for some synaptic weights 
+# RECB = np.zeros((nt, 5))  # Storage matrix for some synaptic weights 
 # The initial weight matrix with fixed random weights
 OMEGA = G * (randn(N, N)) * (rand(N, N) < p) / (np.sqrt(N) * p)
-BPhi = np.zeros(N)  # The initial matrix that will be learned by FORCE method
+BPhi = np.zeros((N, m))  # The initial matrix that will be learned by FORCE method
 # Set the row average weight to be zero, explicitly
 for i in np.arange(0, N, 1): 
     QS = np.argwhere(abs(OMEGA[i, :])>0)
     OMEGA[i, QS] = OMEGA[i, QS] - sum(OMEGA[i, QS])/len(QS)
 
-rlms_start = round(5/dt)  # When to start RLMS
-rlms_stop = round(10/dt)  # When to stop RLMS
 step = 50  # Interval of RLMS in indices
 Q = 10
-E = (2*rand(N)-1)*Q
-
-"""TARGET DYNAMICS - SINE WAVE"""
-zx = np.sin(2*np.pi*np.arange(0, nt, 1)*dt*5)
+E = (2*rand(N, m)-1)*Q
 
 """PREINITIALIZE STORAGE"""
 k = 1
@@ -62,16 +76,17 @@ hr = np.zeros(N)  # Third variable for filtered rates
 JD = 0*IPSC  # Storage variable required for each spike time
 tspike = np.zeros((4*nt+1, 2))  # Storage variable for spike times
 ns = 0  # Number of spikes, counts during simulation
-z = 0  # Initialize the approximant
+z = np.zeros(m)  # Initialize the approximant
 tlast = np.zeros((N))  # This vector is used to set  the refractory times
 v = vreset + rand(N)*(30-vreset)  # Initialize neuron voltage
-REC2 = np.zeros((nt, 20))
-REC = np.zeros((nt, 10))
-current = np.zeros(nt)  # Storage variable for output current/approximant
+#REC2 = np.zeros((nt, 5))
+REC = np.zeros((nt, 5))
+current = np.zeros((nt, m))
 
 """START INTEGRATION LOOP"""
 for i in np.arange(0, nt, 1):
-    inp = IPSC + E*z + BIAS  # Total input current
+    # print(i)
+    inp = IPSC + E @ z + BIAS  # Total input current
 
     # Voltage equation with refractory period
     dv = (dt * i > tlast + tref) * (-v + inp) / tm
@@ -83,7 +98,7 @@ for i in np.arange(0, nt, 1):
     if len(index) > 0:
         # Compute the increase in current due to spiking
         JD = OMEGA[:, index].sum(axis=1)
-        tspike[ns:ns+len(index), :] = np.array([index, 0*index+dt*i]).T
+        #tspike[ns:ns+len(index), :] = np.array([index, 0*index+dt*i]).T
         ns = ns + len(index)  # total number of psikes so far
 
     else:
@@ -101,29 +116,31 @@ for i in np.arange(0, nt, 1):
     hr = hr * np.exp(-dt / td) + np.array(v >= vpeak, dtype=int) / (tr * td)
 
     # Implement RLMS with the FORCE method
-    z = (BPhi * r).sum()  # Approximant
+    z = BPhi.T @ r  # Approximant
     err = z - zx[i]  # Error
     # Only adjust at an interval given by step
     if np.mod(i, step) == 1:
         # Only adjust between rlmst_start and rlms_stop
         if (i > rlms_start) and i < rlms_stop:
             cd = np.matmul(Pinv, r)
-            BPhi = BPhi - (cd*err)
+            BPhi = BPhi - (cd[:, None] @ err[None, :])
             Pinv = Pinv - (cd[:, None] @ cd[None, :]) / (1 + (r @ cd))
 
     v = v + (30 - v) * (v >= vpeak)
 
-    REC[i, :] = v[0:10]  # Record a random voltage
+    REC[i, :] = v[0:5]  # Record a random voltage
 
     # Reset with spike time interpolant implemented
     v = v + (vreset - v) * (v >= vpeak)
     current[i] = z
-    RECB[i, :] = BPhi[0:10]
-    REC2[i, :] = r[0:20]
+    #RECB[i, :] = BPhi[0:5]
+    #REC2[i, :] = r[0:5]
 
 """PLOTTING"""
 if plot:
-    fig, ax = plt.subplots(2)
-    ax[0].plot(current)
-    ax[0].plot(zx)
-    ax[1].plot(REC[:, 0])
+    fig, ax = plt.subplots(3)
+    ax[0].plot(current[:,0])
+    ax[0].plot(zx[:,0])
+    ax[1].plot(current[:,1])
+    ax[1].plot(zx[:,1])
+    ax[2].plot(REC[:, 0])

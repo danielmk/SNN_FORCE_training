@@ -10,9 +10,16 @@ https://doi.org/10.1038/s41467-017-01827-3
 import numpy as np
 from numpy.random import rand, randn
 import matplotlib.pyplot as plt
-from mnist import MNIST
+from keras import datasets
+from sklearn.preprocessing import StandardScaler
 
 np.random.seed(100)  # Seeding randomness for reproducibility
+
+"""LOAD MNIST"""
+data = datasets.mnist.load_data()
+test_image = data[0][0][0].flatten()
+scaler = StandardScaler()
+test_image = scaler.fit_transform(test_image[:,None]).flatten()
 
 """SIMULATION PARAMETERS"""
 plot = True
@@ -51,7 +58,9 @@ Q = 10
 E = (2*rand(N)-1)*Q
 
 """TARGET DYNAMICS - SINE WAVE"""
-zx = np.sin(2*np.pi*np.arange(0, nt, 1)*dt*5)
+
+repeats = int(0.010 /dt)
+zx = np.array([x for x in test_image for i in range(repeats)])
 
 """PREINITIALIZE STORAGE"""
 k = 1
