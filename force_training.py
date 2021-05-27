@@ -1,7 +1,38 @@
-# -*- coding: utf-8 -*-
-"""
-This is a Python port of a MATLAB implementation from Nicola & Clopath (2017):
+"""FORCE training implementation.
+
+This module implements FORCE training of spiking neural networks. it is work
+in progress and currently features leaky integrate-and-fire neurons with
+support for high-dimensional temporal signals (HDTS). The performance is
+optimized by JIT compilation with Numba.
+
+For a reference on FORCE training in spiking neuronal networks with a MATLAB
+implementation see Nicola & Clopath (2017):
 https://doi.org/10.1038/s41467-017-01827-3
+
+Example
+-------
+Examples can be given using either the ``Example`` or ``Examples``
+sections. Sections support any reStructuredText formatting, including
+literal blocks::
+
+    >>> from force_training import _force_train_lif
+    >>> dt = 0.00005
+    >>> f = 5
+    >>> target_repeats
+    >>> target = np.sin(f * np.pi * np.arange(0, 2 * (1 / dt) / freq, 1) * dt)
+    >>> target = target.reshape((target.shape[0]), 1)
+    >>> res = _force_train_lif(target, target_repeats, dt=dt)
+
+
+Notes
+-----
+Planned features are:
+    Izhikevich implementation.
+    AeIF implementation.
+    Turning HDTS off/on.
+    Recover target from pre-trained model.
+    Benchmark targets for computational performance and training quality.
+
 """
 
 import numpy as np
@@ -114,6 +145,12 @@ def _force_train_lif(
         Seed to make simulation deterministic.
     hdts_states : int
         The dimensionality of the HDTS.
+    initial_lr : float
+        The initial rate of weight change.
+    perturbation_factor : float
+        Scaling factor for the perturbation matrix.
+    hdts_factor : float
+        Scaling factor for the hdts matrix.
 
     Returns
     -------
@@ -151,7 +188,7 @@ def _force_train_lif(
     >>> f = 5
     >>> target = np.sin(f * np.pi * np.arange(0, 2 * (1 / dt) / f, 1) * dt)
     >>> target = target.reshape((target.shape[0]), 1)
-    >>> res = _force_train_lif(target, 20, dt=dt)
+    >>> res = _force_train_lif(target, dt=dt)
     >>> (decoded_output, v_recording,
          weights_fixed, target_rec, rd, E1, E2, hdts) = res
     """
